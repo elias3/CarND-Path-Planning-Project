@@ -164,6 +164,9 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 	return {x, y};
 }
 
+double ref_vel = 0.0; // mph
+int lane = 1;
+
 int main()
 {
 	uWS::Hub h;
@@ -213,9 +216,7 @@ int main()
 		// The 2 signifies a websocket event
 		//auto sdata = string(data).substr(0, length);
 		//cout << sdata << endl;
-		auto const lane = 1;
 		// target velocity:
-		auto ref_vel = 49.5; // mph
 
 		if (length && length > 2 && data[0] == '4' && data[1] == '2')
 		{
@@ -259,26 +260,81 @@ int main()
 
 					bool too_close = false;
 
+					bool lane_free[3] = {true, true, true};
+
 					for (int i = 0; i < sensor_fusion.size(); i++)
 					{
-						// car is in my lane
 						float d = sensor_fusion[i][6];
-						auto middle_of_lane = 2 + 4 * lane;
-						if (d < (middle_of_lane + 2) && d > (middle_of_lane - 2))
+						double check_car_s = sensor_fusion[i][5];
+
+						double vx = sensor_fusion[i][3];
+						double vy = sensor_fusion[i][4];
+						double check_speed = sqrt(vx * vx + vy * vy); //magnitude
+
+						std::cout << "Speed is " << check_speed << std::endl;
+						check_car_s += ((double)prev_size * 0.02 * check_speed);
+						for (int l = 0; l < 3; l++)
 						{
-							double vx = sensor_fusion[i][3];
-							double vy = sensor_fusion[i][4];
-							double check_speed = sqrt(vx * vx + vy * vy); //magnitude
-							double check_car_s = sensor_fusion[i][5];
-							check_car_s += ((double)prev_size * 0.02 * check_speed); // project the s value outwards in time
-							if ((check_car_s > car_s) && (check_car_s - car_s) < 30)
+							auto middle_of_lane = 2 + 4 * l;
+
+							if (d <= (middle_of_lane + 2) && d >= (middle_of_lane - 2))
 							{
-								// Do some logic here
-								// could flag to change lanes
-								ref_vel = 29.5;
+								if ((check_car_s > car_s) && (check_car_s - car_s) < 30)
+								{
+									std::cout << "car too close, lane " << l << std::endl;
+									lane_free[l] = false;
+									if (lane == l)
+									{
+										too_close = true;
+									}
+									continue;
+								}
+								if (check_car_s < car_s && (((car_s - check_car_s) < 5) || (check_speed > ref_vel)))
+								{
+									// check velocity of the car
+									std::cout << "velocity is higher or too near, lane " << l << std::endl;
+									lane_free[l] = false;
+								}
 							}
 						}
 					}
+
+					cout << "Lane status " << lane_free[0] << "," << lane_free[1] << "," << lane_free[2] << endl;
+
+					if (too_close)
+					{
+						switch (lane)
+						{
+						case 0:
+						case 2:
+							// check lane 1 if free
+							if (lane_free[1])
+							{
+								lane = 1;
+							}
+							break;
+						case 1:
+							// check if 0 is free
+							if (lane_free[0])
+							{
+								lane = 0;
+							}
+							else if (lane_free[2])
+							{
+								lane = 2;
+							}
+							break;
+						}
+					}
+
+					// if (too_close)
+					// {
+					// 	ref_vel -= .224; // 5 m/s
+					// }
+					// else if (ref_vel < 49.5)
+					// {
+					// 	ref_vel += .224;
+					// }
 
 					json msgJson;
 
@@ -368,6 +424,15 @@ int main()
 					// Fill up the rest of our path planner after filling it with the previous points
 					for (int i = 1; i <= 50 - previous_path_x.size(); i++)
 					{
+						if (too_close)
+						{
+							ref_vel -= .224; // 5 m/s
+						}
+						else if (ref_vel < 49.5)
+						{
+							ref_vel += .224;
+						}
+
 						double N = (target_dist / (.02 * ref_vel / 2.24)); // converting to m/s
 						double x_point = x_add_on + (target_x) / N;
 						double y_point = s(x_point);
