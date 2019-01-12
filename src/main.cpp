@@ -215,7 +215,7 @@ int main()
 		//cout << sdata << endl;
 		auto const lane = 1;
 		// target velocity:
-		auto const ref_vel = 49.5; // mph
+		auto ref_vel = 49.5; // mph
 
 		if (length && length > 2 && data[0] == '4' && data[1] == '2')
 		{
@@ -251,6 +251,34 @@ int main()
 					auto sensor_fusion = j[1]["sensor_fusion"];
 
 					auto prev_size = previous_path_x.size();
+
+					if (prev_size > 0)
+					{
+						car_s = end_path_s;
+					}
+
+					bool too_close = false;
+
+					for (int i = 0; i < sensor_fusion.size(); i++)
+					{
+						// car is in my lane
+						float d = sensor_fusion[i][6];
+						auto middle_of_lane = 2 + 4 * lane;
+						if (d < (middle_of_lane + 2) && d > (middle_of_lane - 2))
+						{
+							double vx = sensor_fusion[i][3];
+							double vy = sensor_fusion[i][4];
+							double check_speed = sqrt(vx * vx + vy * vy); //magnitude
+							double check_car_s = sensor_fusion[i][5];
+							check_car_s += ((double)prev_size * 0.02 * check_speed); // project the s value outwards in time
+							if ((check_car_s > car_s) && (check_car_s - car_s) < 30)
+							{
+								// Do some logic here
+								// could flag to change lanes
+								ref_vel = 29.5;
+							}
+						}
+					}
 
 					json msgJson;
 
