@@ -60,6 +60,25 @@ the path has processed since last time.
 
 2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
 
+## Path Generation
+
+We begin from an initial velocity of 0 mph and try to achieve a maximal velocity close to 50 mph.
+
+According to sensor fusion we decide about a target speed up to 50 mph and a target lane from the three possible lanes (0,1,2). This target speed should not exceed the limit and also the target lane is changed only if according to the sensor fusion data it is possible to switch lanes. For switching lane purposes, a state machine is used to determine the possibilities to swich lanes. Each lane is examined if it is free and marked with a boolean. A preference to switch to a left lane is given. Also according to sensor fusion we determine if we are too close to the car in front and decide whether to lower the speed.
+
+The generated paths are given to the simulator and might be executed partially. Thus we always build on a partial path. The path we want to build is tangent to the angle of the car. We transform from the global coordinates to the car coordinates to do this. From this we create two points.
+
+Afterwards, in Frenet we add evenly 30m spaced points (3) ahead of the starting reference (from the previous path). Those 3 points take the target lane into account.
+
+For now we have created a 5 points path, we transform it to the local car's coordinates and create spline out of those points. Since we have the target lane and the previous path as the foundation of the spline, the points that will be sampled from the spline will form a smooth path that we want the car to execute.
+
+We evaluate the y values of the spline for N points. We create a path of up to 50 points. Part of the points are already present from the previous path, thus we compliment them to 50. The needed points are sampled from the spline to comply with the needed velocity.
+
+The velocity is translated to a frequency of updates, thus it will determine the distance between the points on the created spline. Since we have 50 points, the frequency is determined by a 1/50 = 0.02 mmultiplied by the target speed converted to m/s. See line 436 in main.cpp.
+
+At the end, the points are converted to the global coordinate space.
+
+The final path is the generated path that satisfies the constraints we have and also is a collision free path.
 
 ---
 
